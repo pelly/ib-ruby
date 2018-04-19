@@ -1,4 +1,6 @@
-class ModifyExistingOrderFailureExample
+require "ib-ruby"
+
+class IB::ModifyExistingOrderFailureExample
   def run(client:, contract: IB::Symbols::Stocks.wfc, account:nil)
 
     attrs = {

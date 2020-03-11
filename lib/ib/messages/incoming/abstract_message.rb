@@ -1,130 +1,28 @@
 require 'ib/messages/abstract_message'
+require 'ib/support'
 require 'ox'
-module IBSupport
-	refine Array do
+module IB
+	module Messages
+		module Incoming
+			using IBSupport # refine Array-method for decoding of IB-Messages
 
-		def zero?
-			false
-		end
-		def read_int
-			self.shift.to_i rescue 0
-		end
 
-		def read_decimal
-			i= self.shift.to_d  rescue 0
-			i < IB::TWS_MAX ?  i : nil  # return nil, if a very large number is transmitted
-		end
+			# Container for specific message classes, keyed by their message_ids
+			Classes = {}
 
-		alias read_decimal_max read_decimal
+			class AbstractMessage < IB::Messages::AbstractMessage
 
-		def read_string
-			self.shift rescue ""
-		end
+				attr_accessor :buffer # is an array
 
-		# convert xml into a hash
-		def read_xml
-			Ox.load( read_string, mode: :hash_no_attrs)
-		end
+				def version # Per message, received messages may have the different versions
+					@data[:version]
+				end
 
-		def read_required_string
-			v = read_string
-			error( "requiredString not filled", :load, false)  if v.blank?
-			v
-		end
-
-		def read_int_date
-			Time.at read_int
-		end
-
-		def read_boolean
-
-			v = self.shift rescue nil
-			v.nil? ? false : v.to_i != 0
-		end
-		def read_required_boolean
-			begin
-				if self.empty?
-					logger.error "End of buffer reached"
-					error "End of buffer reached", :load, false
-					return nil
-				else
-					v = self.shift
-					if ["1","0"].include? v
-						return v.to_i
-					else
-						error "bool expected, got #{v} "
+				def check_version actual, expected
+					unless actual == expected || expected.is_a?(Array) && expected.include?(actual)
+						error "Unsupported version #{actual} received, expected #{expected}"
 					end
 				end
-			end while v.empty? 
-			logger.error { "Bool required, #{v} detected instead" }
-			error  "Bool required, #{v} detected instead", :load, false
-		end
-
-		def read_date
-			the_string = read_string
-			the_string.blank? ? nil : Date.parse(the_string)
-		end
-		#    def read_array
-		#      count = read_int
-		#    end
-
-		## originally provided in socket.rb
-		#    # Returns loaded Array or [] if count was 0
-		def read_array &block
-			count = read_int
-			# debug	     STDOUT.puts "ARRAY ----|> #{count}"
-			count > 0 ? Array.new(count, &block) : []
-		end
-		#   
-		#       # Returns loaded Hash
-		def read_hash
-			tags = read_array { |_| [read_string, read_string] }
-			tags.empty? ? Hash.new :  Hash[*tags.flatten]
-		end
-		#
-
-		def read_contract  # read a standard contract and return als hash
-			{	 con_id: read_int,
-				 symbol: read_string,
-				 sec_type: read_string,
-				 expiry: read_string,
-				 strike: read_decimal,
-				 right: read_string,
-				 multiplier: read_int,
-				 primary_exchange: read_string,
-				 currency: read_string,
-				 local_symbol: read_string,
-				 trading_class: read_string }  # new Version 8
-
-		end
-
-
-		alias read_bool read_boolean
-	end
-end
-module IB
-  module Messages
-    module Incoming
-
-    using IBSupport
-  
-
-      # Container for specific message classes, keyed by their message_ids
-      Classes = {}
-
-      class AbstractMessage < IB::Messages::AbstractMessage
-
-        attr_accessor :buffer # is an array
-
-        def version # Per message, received messages may have the different versions
-          @data[:version]
-        end
-
-        def check_version actual, expected
-          unless actual == expected || expected.is_a?(Array) && expected.include?(actual)
-            error "Unsupported version #{actual} received, expected #{expected}"
-          end
-        end
 
 				# Create incoming message from a given source (IB Socket or data Hash)
 				def initialize source
@@ -134,38 +32,41 @@ module IB
 						@buffer =[] # initialize empty buffer, indicates a successfull initializing
 					else
 						@buffer = source
-						#  if uncommented, the raw-input from the tws is displayed, logger does not work on this level
-				#		puts "BUFFER"
-				#		puts buffer.inspect #.join(" :\n ")
-				#		puts "BUFFER END"
+						#  if uncommented, the raw-input from the tws is included in the logging
+				#		puts "BUFFER .> #{buffer.inspect}"
+#					Connection.logger.debug { "BUFFER :> #{buffer.inspect} "}
 						@data = Hash.new
 						self.load
 					end
 				end
 
-	## more recent messages omit the transmission of a version
-	## thus just load the parameter-map 
-	def simple_load
-            load_map *self.class.data_map
-        rescue IB::Error  => e
-          error "Reading #{self.class}: #{e.class}: #{e.message}", :load, e.backtrace
-	end
-        # Every message loads received message version first
-        # Override the load method in your subclass to do actual reading into @data.
-        def load
-	    unless self.class.version.zero?
-            @data[:version] = buffer.read_int
-            check_version @data[:version], self.class.version
-	    end
-	    simple_load
-        end
+				def valid?
+					@buffer.empty? 
+				end
 
-        # Load @data from the buffer according to the given data map.
-        #
-        # map is a series of Arrays in the format of
-        #   [ :name, :type ], [  :group, :name, :type]
-        # type identifiers must have a corresponding read_type method on the buffer-class (read_int, etc.).
-        # group is used to lump together aggregates, such as Contract or Order fields
+				## more recent messages omit the transmission of a version
+				## thus just load the parameter-map 
+				def simple_load
+					load_map *self.class.data_map
+				rescue IB::Error  => e
+					error "Reading #{self.class}: #{e.class}: #{e.message}", :load, e.backtrace
+				end
+				# Every message loads received message version first
+				# Override the load method in your subclass to do actual reading into @data.
+				def load
+					unless self.class.version.zero?
+						@data[:version] = buffer.read_int
+						check_version @data[:version], self.class.version
+					end
+					simple_load
+				end
+
+				# Load @data from the buffer according to the given data map.
+				#
+				# map is a series of Arrays in the format of
+				#   [ :name, :type ], [  :group, :name, :type]
+				# type identifiers must have a corresponding read_type method on the buffer-class (read_int, etc.).
+				# group is used to lump together aggregates, such as Contract or Order fields
 				def load_map(*map)
 					map.each do |instruction|
 						# We determine the function of the first element
@@ -189,13 +90,9 @@ module IB
 								else
 									instruction # [ :group, :name, :type, (:block)]
 								end
-							# debug	      print "Name: #{name}   "
 							begin
 								data = @buffer.__send__("read_#{type}", &block)
-							rescue IB::LoadError => e
-								puts "TEST"
-								error "Reading #{self.class}: #{e.class}: #{e.message}  --> Instruction: #{name}" , :reader, false 
-							rescue NoMethodError => e
+							rescue IB::LoadError, NoMethodError => e
 								error "Reading #{self.class}: #{e.class}: #{e.message}  --> Instruction: #{name}" , :reader, false 
 							end
 							# debug	      puts data.inspect
@@ -211,7 +108,7 @@ module IB
 					end
 				end
 
-      end # class AbstractMessage
-    end # module Incoming
-  end # module Messages
+			end # class AbstractMessage
+		end # module Incoming
+	end # module Messages
 end # module IB

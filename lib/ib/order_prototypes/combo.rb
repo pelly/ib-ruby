@@ -1,10 +1,7 @@
 module IB
-#  module UseOrder
 
-=begin
-Combo-Orders are used for NonGuaranteed Orders only.
-»Normal« Option-Spreads are transmited by ordinary Limit-Orders
-=end
+#Combo-Orders are used for NonGuaranteed Orders only.
+#»Normal« Option-Spreads are transmited by ordinary Limit-Orders
     module Combo
       ### Basic Order Prototype: Combo with two limits
       extend OrderPrototype
@@ -12,7 +9,7 @@ Combo-Orders are used for NonGuaranteed Orders only.
       def defaults
 	## todo implement serialisation of  key/tag Hash to camelCased-keyValue-List 
 #      super.merge order_type: :limit , combo_params: { non_guaranteed: true} 
-	#      for the time beeing, we use the array representation
+	#      for the time being, we use the array representation
       super.merge order_type: :limit , combo_params: [ ['NonGuaranteed', true] ]
       end
 

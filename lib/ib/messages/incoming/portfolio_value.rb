@@ -8,22 +8,40 @@ module IB
 				end
 			end
 
-			PortfolioValue = def_message( [7, 8], ContractMessage,
+			PortfolioValue = def_message [7, 8], ContractMessage,
 						[:contract, :contract], # read standard-contract 
-						#																	 [ con_id, symbol,. sec_type, expiry, strike, right, multiplier,
-						# primary_exchange, currency, local_symbol, trading_class ] 
-						[:position, :decimal],   # changed from int after Server Vers. MIN_SERVER_VER_FRACTIONAL_POSITIONS
-						[:market_price, :decimal],
-						[:market_value, :decimal],
-						[:average_cost, :decimal],
-						[:unrealized_pnl, :decimal_max], # May be nil!
-						[:realized_pnl, :decimal_max], #   May be nil!
-						[:account_name, :string] ) do
-				#def to_human
-					"<PortfolioValue: #{contract.to_human} (#{position}): Market #{market_price}" +
-					" price #{market_value} value; PnL: #{unrealized_pnl} unrealized," +
-					" #{realized_pnl} realized; account #{account_name}>"
-				end
+						[:portfolio_value, :position, :decimal],  
+						[:portfolio_value,:market_price, :decimal],
+						[:portfolio_value,:market_value, :decimal],
+						[:portfolio_value,:average_cost, :decimal],
+						[:portfolio_value,:unrealized_pnl, :decimal], # May be nil!
+						[:portfolio_value,:realized_pnl, :decimal], #   May be nil!
+						[:account, :string] 
+
+
+				class PortfolioValue
+
+
+				#	def to_human
+				#	"<PortfolioValue: #{contract.to_human} #{portfolio_value}>"
+				#	end
+					
+					def portfolio_value
+						unless @portfolio_value.present?
+							@portfolio_value =  IB::PortfolioValue.new   @data[:portfolio_value] 
+							@portfolio_value.contract = contract
+							@portfolio_value.account =  account
+						end
+						@portfolio_value # return_value
+					end
+
+					def account_name
+						@account_name =  @data[:account]
+					end
+
+					alias :to_human :portfolio_value 
+				end # PortfolioValue
+
 
 
 			PositionData =
@@ -51,14 +69,6 @@ module IB
 			PositionsMultiEnd =  def_message 72
 	
 					
-					AccountUpdatesMulti =  def_message( 73,
-							[ :request_id, :int ],
-							[ :account , :string ],
-							[ :key		,  :string ],
-							[ :value ,	 :decimal],
-							[ :currency, :string ])
-
-					AccountUpdatesMultiEnd =  def_message 74
 
 
 

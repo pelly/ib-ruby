@@ -1,6 +1,6 @@
 require 'active_model'
 require 'active_support/concern'
-require 'active_support/hash_with_indifferent_access'
+#require 'active_support/hash_with_indifferent_access'
 
 module IB
 
@@ -19,12 +19,21 @@ module IB
 
     # Comparison support
     def content_attributes
-      HashWithIndifferentAccess[attributes.reject do |(attr, _)|
+      #HashWithIndifferentAccess[attributes.reject do |(attr, _)|
+			#NoMethodError if a Hash is assigned to an attribute
+      Hash[attributes.reject do |(attr, _)|
                                   attr.to_s =~ /(_count)\z/ ||
                                     [:created_at, :updated_at, :type,
                                      :id, :order_id, :contract_id].include?(attr.to_sym)
       end]
     end
+
+=begin
+Remove all Time-Stamps from the list of Attributes
+=end
+		def invariant_attributes
+				attributes.reject{|x| x =~ /_at/}
+		end
 
     # Update nil attributes from given Hash or model
     def update_missing attrs

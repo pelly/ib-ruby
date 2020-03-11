@@ -24,10 +24,10 @@ module IB
         # each one and postpending a '\0'.
         #
         def send_to socket
-	  ### debugging of Messages
-#	  puts "------sendto ---------(debugging output in outgoing/abstract_message)" 
-#	  puts socket.prepare_message( self.preprocess).inspect.split('\x00')[3..-1].inspect
-#	  puts "------sendto ---------"
+	  ### debugging of outgoing Messages
+	 # puts "------sendto ---------(debugging output in outgoing/abstract_message)" 
+	 # puts socket.prepare_message( self.preprocess).inspect.split('\x00')[3..-1].inspect
+	 # puts "------sendto ---------"
           socket.send_messages self.preprocess #.each {|data| socket.write_data data}
         end
 
@@ -61,9 +61,9 @@ module IB
 					end
          [
 	   self.class.version.zero? ? self.class.message_id : [ self.class.message_id, self.class.version ],
-           @data[:id] || @data[:ticker_id] ||# @data[:request_id] ||
-           @data[:local_id] || @data[:order_id] || [],
-           self.class.data_map.map do |(field, default_method, args)|
+           @data[:id] || @data[:ticker_id] ||# @data[:request_id] ||  # id, ticker_id, local_id, order_id
+           @data[:local_id] || @data[:order_id] || [],								# do not appear in data_map
+           self.class.data_map.map do |(field, default_method, args)| # but request_id does
              case
              when default_method.nil?
                @data[field]

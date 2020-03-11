@@ -97,7 +97,7 @@ module IB
       :exempt_code, #       int
 
       #  Clearing info
-      :account, #  String: The account. For institutional customers only.
+      :account, #  String: The account number (Uxxx). For institutional customers only.
       :settling_firm, #    String: Institutional only
       :clearing_account, # String: For IBExecution customers: Specifies the
       #                  true beneficiary of the order. This value is required
@@ -225,15 +225,22 @@ module IB
 		      # This is a regulartory attribute that applies 
 		      # to all US Commodity (Futures) Exchanges, provided 
 		      # to allow client to comply with CFTC Tag 50 Rules. 
-      :soft_dollar_tier_params,        # 106: MIN_SERVER_VER_SOFT_DOLLAR_TIER
+			:soft_dollar_tier_name,        # 106: MIN_SERVER_VER_SOFT_DOLLAR_TIER
+			:soft_dollar_tier_value,
+			:soft_dollar_tier_display_name,
 		      # Define the Soft Dollar Tier used for the order. 
 		      #	Only provided for registered professional advisors and hedge and mutual funds.
 		      #	format: "#{name}=#{value},#{display_name}", name and value are used in the 
 		      #	      order-specification. Its included as ["#{name}","#{value}"] pair
   
-      :cash_qty                     # 111: MIN_SERVER_VER_CASH_QTY
+      :cash_qty,                     # 111: MIN_SERVER_VER_CASH_QTY
 			# decimal : The native cash quantity
-
+			:mifid_2_decision_maker,
+		  :mifid_2_decision_algo,
+		  :mifid_2_execution_maker,
+			:mifid_2_execution_algo,
+			:dont_use_auto_price_for_hedge,
+			:discretionary_up_to_limit_price
 
     # Properties with complex processing logics
     prop :tif, #  String: Time in Force (time to market): DAY/GAT/GTD/GTC/IOC
@@ -259,7 +266,8 @@ module IB
       :opt_out_smart_routing => :bool, # Australian exchange only, default false
       :open_close => PROPS[:open_close], # Originally String: O=Open, C=Close ()
       # for ComboLeg compatibility: SAME = 0; OPEN = 1; CLOSE = 2; UNKNOWN = 3;
-      [:side, :action] => PROPS[:side] # String: Action/side: BUY/SELL/SSHORT/SSHORTX
+      [:side, :action] => PROPS[:side], # String: Action/side: BUY/SELL/SSHORT/SSHORTX
+			:is_O_ms_container => :bool
 
     prop :placed_at,
       :modified_at,
@@ -274,17 +282,18 @@ module IB
 				#			 CondPriceMin.;60.0
 
 
-    prop :misc1, :misc2, :misc3, :misc4, :misc5, :misc6, :misc7, :misc8 # just 4 debugging
+#    prop :misc1, :misc2, :misc3, :misc4, :misc5, :misc6, :misc7, :misc8 # just 4 debugging
 
     alias order_combo_legs leg_prices
     alias smart_combo_routing_params combo_params
 
-    serialize :leg_prices
-    serialize :conditions
-    serialize :algo_params, HashWithIndifferentAccess
+		# serialize is included for active_record compatibility
+  #  serialize :leg_prices
+  #  serialize :conditions
+  #  serialize :algo_params, Hash
    # serialize :combo_params
-    serialize :soft_dollar_tier_params, HashWithIndifferentAccess
-    serialize :mics_options, HashWithIndifferentAccess
+ #   serialize :soft_dollar_tier_params, HashWithIndifferentAccess
+    serialize :mics_options, Hash
 
     # Order is always placed for a contract. Here, we explicitly set this link.
     belongs_to :contract
@@ -294,6 +303,8 @@ module IB
 
     # Order has a collection of OrderStates, last one is always current
     has_many :order_states
+		# Order can have multible conditions 
+    has_many  :conditions
 
     def order_state
       order_states.last
@@ -339,62 +350,77 @@ module IB
 
     # Order is not valid without correct :local_id
     validates_numericality_of :local_id, :perm_id, :client_id, :parent_id,
-      :quantity, :min_quantity, :display_size,
+      :total_quantity, :min_quantity, :display_size,
       :only_integer => true, :allow_nil => true
 
     validates_numericality_of :limit_price, :aux_price, :allow_nil => true
 
 
-    def default_attributes    # default valus are taken from order.java 
-			      #  public Order() { }
+    def default_attributes				# default valus are taken from order.java 
+																	#  public Order() { }
       super.merge(
-      :active_start_time => "",  # order.java # 470		# Vers 69
-      :active_stop_time => "",	 #order.java # 471	# Vers 69
-        :algo_strategy => '',
-	:algo_id => '' , # order.java # 495
-	:auction_strategy => :none,
-	:conditions => [],
-        :continuous_update => 0,
-        :designated_location => '', # order.java # 487
-        :display_size => 0,
-        :discretionary_amount => 0,
-	:etrade_only => true,	# stolen from python client
-        :exempt_code => -1,
-	:ext_operator  => '' ,  # order.java # 499
-	:firm_quote_only  => true,  # stolen from python client
-	:not_held => false,  # order.java # 494
-        :oca_type => :none,
-	:order_type => :limit,
-        :open_close => :open,	  # order.java # 
-	:opt_out_smart_routing => false,
-        :origin => :customer,
-	:outside_rth => false, # order.java # 472
-        :parent_id => 0,
-	:random_size => false,	  #oder.java 497			# Vers 76
-	:random_price => false,	  # order.java # 498		# Vers 76
-	:scale_auto_reset => false,  # order.java # 490
-	:scale_random_percent => false, # order.java # 491
-	:scale_table => "", # order.java # 492
-        :short_sale_slot => :default,
-        :solicided =>  false,  # order.java #  496
-        :tif => :day,
-        :transmit => true,
-	:trigger_method => :default,
-        :what_if => false,  # order.java # 493
-        :leg_prices => [],
-        :algo_params => HashWithIndifferentAccess.new, #{},
-        :combo_params =>[], #{},
-        :soft_dollar_tier_params => HashWithIndifferentAccess.new( 
-					    :name => "",
-					    :val => "",
-					    :display_name => ''),
-        :order_state => IB::OrderState.new(:status => 'New',
+      :active_start_time => "",		# order.java # 470		# Vers 69
+      :active_stop_time => "",		#order.java # 471	# Vers 69
+      :algo_strategy => '',
+			:algo_id => '' ,								# order.java # 495
+			:auction_strategy => :none,
+			:conditions => [],
+      :continuous_update => 0,
+      :designated_location => '', # order.java # 487
+      :display_size => 0,
+      :discretionary_amount => 0,
+			:etrade_only => true,	# stolen from python client
+      :exempt_code => -1,
+			:ext_operator  => '' ,  # order.java # 499
+			:firm_quote_only  => true,  # stolen from python client
+			:not_held => false,  # order.java # 494
+      :oca_type => :none,
+			:order_type => :limit,
+      :open_close => :open,	  # order.java # 
+			:opt_out_smart_routing => false,
+      :origin => :customer,
+			:outside_rth => false, # order.java # 472
+      :parent_id => 0,
+			:random_size => false,	  #oder.java 497			# Vers 76
+			:random_price => false,	  # order.java # 498		# Vers 76
+			:scale_auto_reset => false,  # order.java # 490
+			:scale_random_percent => false, # order.java # 491
+			:scale_table => "", # order.java # 492
+      :short_sale_slot => :default,
+      :solicided =>  false,  # order.java #  496
+      :tif => :day,
+      :transmit => true,
+			:trigger_method => :default,
+      :what_if => false,  # order.java # 493
+      :leg_prices => [],
+      :algo_params => Hash.new, #{},
+      :combo_params =>[], #{},
+  #      :soft_dollar_tier_params => HashWithIndifferentAccess.new( 
+	#				    :name => "",
+	#				    :val => "",
+	#				    :display_name => ''),
+       :order_state => IB::OrderState.new(:status => 'New',
                                            :filled => 0,
                                            :remaining => 0,
                                            :price => 0,
                                            :average_price => 0)
       )  # closing of merge
         end
+
+
+=begin rdoc
+Format of serialisation
+
+	count of records
+	for each condition: conditiontype, condition-fields
+=end
+		def serialize_conditions
+			if conditions.empty?
+			0
+			else
+			[ conditions.count ]	+ conditions.map( &:serialize )+  [ conditions_ignore_rth, conditions_cancel_order]
+			end
+		end
 
     def serialize_algo
       if algo_strategy.nil? || algo_strategy.empty?
@@ -403,34 +429,43 @@ module IB
         [algo_strategy,
          algo_params.size,
          algo_params.to_a,
-	algo_id ]	    # Vers 71
+				 algo_id ]	    # Vers 71
       end
     end
 
-    def serialize_soft_dollar_tier
-      [soft_dollar_tier_params[:name],soft_dollar_tier_params[:val]]
-    end
+   # def serialize_soft_dollar_tier
+   #   [soft_dollar_tier_params[:name],soft_dollar_tier_params[:val]]
+   # end
 
-    def initialize_soft_dollar_tier *fields
-      self.soft_dollar_tier_params= HashWithIndifferentAccess.new(
-      name:   fields.pop, val:  fields.pop, display_name:  fields.pop )
-    end
+   # def initialize_soft_dollar_tier *fields
+   #   self.soft_dollar_tier_params= HashWithIndifferentAccess.new(
+   #   name:   fields.pop, val:  fields.pop, display_name:  fields.pop )
+   # end
 
     def serialize_misc_options
       ""		  # Vers. 70  
     end
     # Placement
-    def place contract, connection
+		#
+		# The Order is only placed, if local_id is not set
+		#
+		# Modifies the Order-Object and returns the assigned local_id
+    def place the_contract=nil, connection=nil
+			connection ||= IB::Connection.current
       error "Unable to place order, next_local_id not known" unless connection.next_local_id
+			error "local_id present. Order is already placed.  Do you  want to modify?"  unless  local_id.nil?
       self.client_id = connection.client_id
       self.local_id = connection.next_local_id
       connection.next_local_id += 1
       self.placed_at = Time.now
-      modify contract, connection, self.placed_at
+      modify the_contract, connection, self.placed_at
     end
 
     # Modify Order (convenience wrapper for send_message :PlaceOrder). Returns local_id.
-    def modify contract, connection, time=Time.now
+    def modify the_contract=nil, connection=nil, time=Time.now
+			error "Unable to modify order; local_id not specified" if local_id.nil?
+			self.contract =  the_contract unless the_contract.nil?
+			connection ||= IB::Connection.current
       self.modified_at = time
       connection.send_message :PlaceOrder,
         :order => self,
@@ -450,9 +485,8 @@ module IB
          tif == other.tif &&
          action == other.action &&
          order_type == other.order_type &&
-         quantity == other.quantity &&
-         (limit_price == other.limit_price || # TODO Floats should be Decimals!
-          (limit_price - other.limit_price).abs < 0.00001) &&
+         total_quantity == other.total_quantity &&
+         limit_price == other.limit_price  &&
          aux_price == other.aux_price &&
          origin == other.origin &&
          designated_location == other.designated_location &&
@@ -472,8 +506,8 @@ module IB
     end
 
     def to_human
-      "<Order: " + ((order_ref && order_ref != '') ? "#{order_ref} " : '') +
-        "#{self[:order_type]} #{self[:tif]} #{side} #{total_quantity} " +
+      "<Order: " + (order_ref.present? ? order_ref.to_s : '') +
+        "#{self[:order_type]} #{self[:tif]} #{action} #{total_quantity} " + " @ " +
         (limit_price ? "#{limit_price} " : '') + "#{status} " +
         ((aux_price && aux_price != 0) ? "/#{aux_price}" : '') +
         "##{local_id}/#{perm_id} from #{client_id}" +

@@ -9,11 +9,11 @@ module IB
 
                       [:contract, :contract], # read standard-contract 
 											# [ con_id, symbol,. sec_type, expiry, strike, right, multiplier,
-											# 	primary_exchange, currency, local_symbol, trading_class ] 
+											# 	exchange, currency, local_symbol, trading_class ] 
 
-                      [:order, :action, :required_string],
+                      [:order, :action, :string],
                       [:order, :total_quantity, :decimal],
-                      [:order, :order_type, :required_string],
+                      [:order, :order_type, :string],
                       [:order, :limit_price, :decimal],
                       [:order, :aux_price, :decimal],
                       [:order, :tif, :string],
@@ -50,19 +50,19 @@ module IB
                       [:order, :stock_range_upper, :decimal],
                       [:order, :display_size, :int],
                       #@order.rth_only = @socket.read_boolean
-                      [:order, :block_order, :required_boolean],
-                      [:order, :sweep_to_fill, :required_boolean],
-                      [:order, :all_or_none, :required_boolean],
+                      [:order, :block_order, :boolean],
+                      [:order, :sweep_to_fill, :boolean],
+                      [:order, :all_or_none, :boolean],
                       [:order, :min_quantity, :int],
                       [:order, :oca_type, :int],
-                      [:order, :etrade_only, :required_boolean],
-                      [:order, :firm_quote_only, :required_boolean],
+                      [:order, :etrade_only, :boolean],
+                      [:order, :firm_quote_only, :boolean],
                       [:order, :nbbo_price_cap, :decimal],
                       [:order, :parent_id, :int],
                       [:order, :trigger_method, :int],
                       [:order, :volatility, :decimal],
                       [:order, :volatility_type, :int],
-                      [:order, :delta_neutral_order_type, :required_string],
+                      [:order, :delta_neutral_order_type, :string],
                       [:order, :delta_neutral_aux_price, :decimal]
 
       class OpenOrder
@@ -90,6 +90,10 @@ module IB
         def status
           order.status
         end
+
+				def conditions
+					order.conditions
+				end
 
         # Object accessors
 
@@ -144,7 +148,7 @@ module IB
                    # As of client v.55, we receive in OpenOrder for Combos:
                    #    Contract.orderComboLegs Array
                    #    Order.leg_prices Array
-                   [:contract, :legs, :array, proc do |_|
+                   [:contract, :combo_legs, :array, proc do |_|
                      IB::ComboLeg.new :con_id => @buffer.read_int,
                                       :ratio => @buffer.read_int,
                                       :action => @buffer.read_string,
@@ -183,7 +187,7 @@ module IB
 
                    [:order, :opt_out_smart_routing, :boolean],
                    [:order, :clearing_account, :string],
-                   [:order, :clearing_intent, :required_string],
+                   [:order, :clearing_intent, :string],
                    [:order, :not_held, :boolean],
 
                    [:underlying_present, :boolean],
@@ -196,21 +200,11 @@ module IB
                    # TODO: Test Order with algo_params, scale and legs!
                    [:order, :algo_strategy, :string],
                    [proc { | | filled?(@data[:order][:algo_strategy]) },
-                    [:order, :algo_params, :hash]  #-
+                    [:order, :algo_params, :hash]  
                    ],
-#		   order.algoParamsCount = decode(int, fields)
-#		   357                 if order.algoParamsCount > 0:
-#		     358                     order.algoParams = []
-#		   359                     for idxAlgoPrm in range(order.algoParamsCount):
-#		     360                         tagValue = TagValue()
-#		   361                         tagValue.tag = decode(str, fields)
-#		   362                         tagValue.value = decode(str, fields)
-#		   363                         order.algoParams.append(tagValue)
-#
-
                    [:order, :solicided, :boolean],
                    [:order, :what_if, :boolean],
-		   [:order_state, :status, :required_string],
+		   [:order_state, :status, :string],
                    # IB uses weird String with Java Double.MAX_VALUE to indicate no value here
                    [:order_state, :init_margin, :decimal], # :string],
                    [:order_state, :maint_margin, :decimal], # :string],
@@ -233,34 +227,31 @@ module IB
 		      [:order, :reference_change_amount, :decimal ],
 		      [:order, :reference_exchange_id, :string ]
 		   ],
-                   [:order, :conditions, :array , proc do |_|
-				      { tag: buffer.read_string, value: buffer.read_string }  # needs modification 
-		   end],
-		    ## todo : process conditions
-		    #394             if order.conditionsSize > 0:
-		    # 395                 order.conditions = []
-		    #  396                 for idxCond in range(order.conditionsSize):
-		    #   397                     order.conditionType = decode(int, fields)
-		    #    398                     condition = order_condition.Create(order.conditionType)
-		    #     399                     condition.decode(fields)
-		    #      400                     order.conditions.append(condition)
-		    #       401 
-		    #        402                 order.conditionsIgnoreRth = decode(bool, fields)
-		    #         403                 order.conditionsCancelOrder = decode(bool, fields)
-		    #          404 
-		    #          
+		    [:order , :conditions, :array, proc {  IB::OrderCondition.make_from( @buffer ) } ],
+				[proc { !@data[:order][:conditions].blank?  },
+						[:order, :conditions_ignore_rth, :bool],
+						[:order, :conditions_cancel_order,:bool]
+					], 
 		    [:order, :adjusted_order_type, :string],
 		    [:order, :trigger_price,  :decimal],
 		    [:order, :trail_stop_price,  :decimal],	    # cpp -source: Traillimit orders 
 		    [:order, :adjusted_stop_limit_price,  :decimal],
 		    [:order, :adjusted_trailing_amount,  :decimal],
-		    [:order, :adjustable_trailing_unit,  :int]
+		    [:order, :adjustable_trailing_unit,  :int],
 
-		    [:order, :soft_dollar_tier_params, :name,  :string]
-		    [:order, :soft_dollar_tier_params, :value, :string]
-		    [:order, :soft_dollar_tier_params, :display_name,  :string]
-		    [:order, :cash_qty,  :decimal]
-		    
+		    [:order, :soft_dollar_tier_name,  :string_not_null],
+		    [:order, :soft_dollar_tier_value, :string_not_null],
+		    [:order, :soft_dollar_tier_display_name,  :string_not_null],
+		    [:order, :cash_qty,  :decimal],
+				[:order, :mifid_2_decision_maker, :string_not_null ],   ## correct appearance of fields below
+				[:order, :mifid_2_decision_algo, :string_not_null ],		##  is not tested yet
+				[:order, :mifid_2_execution_maker, :string ],
+				[:order, :mifid_2_execution_algo, :string_not_null ],
+				[:order, :dont_use_auto_price_for_hedge, :string ],
+				[:order, :is_O_ms_container, :bool ],
+				[ :order, :discretionary_up_to_limit_price, :decimal ]
+
+    
         end
 
         # Check if given value was set by TWS to something vaguely "positive"

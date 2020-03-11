@@ -1,4 +1,5 @@
 require 'models/ib/contract'
+require 'models/ib/option_detail'
 
 module IB
   class Option < Contract
@@ -11,6 +12,10 @@ module IB
     validates_format_of :right, :with => /\Aput$|^call\z/,
       :message => "should be put or call"
 
+
+		# introduce Option.greek with reference to IB::OptionDetail-dataset
+		#
+		has_one :greek , as: :option_detail
     # For Options, this is contract's OSI (Option Symbology Initiative) name/code
     alias osi local_symbol
 
@@ -51,14 +56,22 @@ module IB
       super.merge :sec_type => :option
       #self[:description] ||= osi ? osi : "#{symbol} #{strike} #{right} #{expiry}"
     end
+		def == other
+      super(other) || (  # finish positive, if contract#== is true
+												  # otherwise, we most probably compare the response from IB with our selfmade input
+			exchange == other.exchange &&
+			include_expired == other.include_expired &&
+			sec_type == other.sec_type  &&
+			multiplier == other.multiplier &&
+			strike == other.strike &&
+			right == other.right &&
+			multiplier == other.multiplier &&
+			expiry == other.expiry )
+
+		end
 
     def to_human
-			my_expiry = if last_trading_day.present?
-										last_trading_day
-									else
-										expiry
-									end
-      "<TheOption: " + [symbol, my_expiry, right, strike, exchange, currency].join(" ") + ">"
+      "<Option: " + [symbol, expiry, right, strike, exchange, currency].join(" ") + ">"
     end
 
   end # class Option

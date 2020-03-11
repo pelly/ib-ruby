@@ -17,22 +17,6 @@ module IB
 
       ### Define short message classes in-line:
 
-      AccountValue = def_message([6, 2], [:key, :string],
-                                 [:value, :string],
-                                 [:currency, :string],
-                                 [:account_name, :string]) do
-        "<AccountValue: #{account_name}, #{key}=#{value} #{currency}>"
-      end
-
-		  AccountSummary = def_message(63,  [:request_id, :int],
-																	 [ :account, :string ],
-																	 [ :tag , :string ],
-																	 [ :value , :decimal ],
-																	 [ :currency , :string ]
-																	)
-		  AccountSummaryEnd = def_message(64)
-
-      AccountUpdateTime = def_message 8, [:time_stamp, :string]
 
       NewsBulletins =
           def_message 14, [:request_id, :int], # unique incrementing bulletin ID.
@@ -43,19 +27,41 @@ module IB
                       [:text, :string], # The bulletin's message text.
                       [:exchange, :string] # Exchange from which this message originated.
 
-      ManagedAccounts =
-          def_message 15, [:accounts_list, :string]
 
-      # Receives previously requested FA configuration information from TWS.
-      ReceiveFA =
-          def_message 16, [:type, :int], # type of Financial Advisor configuration data
-                      #                    being received from TWS. Valid values include:
-                      #                    1 = GROUPS, 2 = PROFILE, 3 = ACCOUNT ALIASES
-                      [:xml, :xml] # XML string with requested FA configuration information.
-
-      # Receives an XML document that describes the valid parameters that a scanner
+      # Receives an converted XML document that describes the valid parameters that a scanner
       # subscription can have (for outgoing RequestScannerSubscription message).
-      ScannerParameters = def_message 19, [:xml, :string]
+      ScannerParameters = def_message 19, [:xml, :xml]
+
+			class  ScannerParameters 
+				# returns a List of Hashes specifing Instruments. 
+				# >  C.received[:ScannerParameters].first.instruments.first
+				# => {:name=>"US Stocks", 
+				#     :type=>"STK", 
+				#     :filters=>"AFTERHRSCHANGEPERC,AVGOPTVOLUME,AVGPRICETARGET,AVGRATING,AVGTARGET2PRICERATIO,AVGVOLUME,AVGVOLUME_USD,CHANGEOPENPERC,CHANGEPERC,EMA_20,EMA_50,EMA_100,EMA_200,PRICE_VS_EMA_20,PRICE_VS_EMA_50,PRICE_VS_EMA_100,PRICE_VS_EMA_200,DAYSTOCOVER,DIVIB,DIVYIELD,DIVYIELDIB,FEERATE,FIRSTTRADEDATE,GROWTHRATE,HALTED,HASOPTIONS,HISTDIVIB,HISTDIVYIELDIB,IMBALANCE,IMBALANCEADVRATIOPERC,IMPVOLAT,IMPVOLATOVERHIST,INSIDEROFFLOATPERC,INSTITUTIONALOFFLOATPERC,MACD,MACD_SIGNAL,MACD_HISTOGRAM,MKTCAP,MKTCAP_USD,NEXTDIVAMOUNT,NEXTDIVDATE,NUMPRICETARGETS,NUMRATINGS,NUMSHARESINSIDER,NUMSHARESINSTITUTIONAL,NUMSHARESSHORT,OPENGAPPERC,OPTVOLUME,OPTVOLUMEPCRATIO,PERATIO,PILOT,PPO,PPO_SIGNAL,PPO_HISTOGRAM,PRICE,PRICE2BK,PRICE2TANBK,PRICERANGE,PRICE_USD,QUICKRATIO,REBATERATE,REGIMBALANCE,REGIMBALANCEADVRATIOPERC,RETEQUITY,SHORTABLESHARES,SHORTOFFLOATPERC,SHORTSALERESTRICTED,SIC,ISSUER_COUNTRY_CODE,SOCSACT,SOCSNET,STKTYPE,STVOLUME_3MIN,STVOLUME_5MIN,STVOLUME_10MIN,TRADECOUNT,TRADERATE,UNSHORTABLE,VOLUME,VOLUMERATE,VOLUME_USD,RCGLTCLASS,RCGLTENDDATE,RCGLTIVALUE,RCGLTTRADE,RCGITCLASS,RCGITENDDATE,RCGITIVALUE,RCGITTRADE,RCGSTCLASS,RCGSTENDDATE,RCGSTIVALUE,RCGSTTRADE", 
+				#     :group=>"STK.GLOBAL", 
+				#     :shortName=>"US", 
+				#     :cloudScanNotSupported=>"false"}
+				def instruments
+					@data[:xml][:ScanParameterResponse][:InstrumentList].first[:Instrument]
+				end
+
+				# returns a List of Hashes specifing ScanTypes
+				# >  C.received[:ScannerParameters].first.scan_types.first
+				# => {:displayName=>"Assets Under Management (AltaVista) Desc", 
+				#			:scanCode=>"SCAN_etfAssets_DESC", 
+				#			:instruments=>"ETF.EQ.US,ETF.FI.US", 
+				#			:absoluteColumns=>"false", 
+				#			:Columns=>{:ColumnSetRef=>{:colId=>"0", :name=>"PctPerf", :display=>"false", :displayType=>"DATA"}, 
+				#			:Column=>{:colId=>"6031", :name=>"Assets Under Management", :display=>"true", :displayType=>"DATA"}}, 
+				#			:supportsSorting=>"true", 
+				#			:respSizeLimit=>"2147483647", :snapshotSizeLimit=>"2147483647", 
+				#			:searchDefault=>"false", :access=>"unrestricted"} 
+# 
+
+				def scan_types
+					@data[:xml][:ScanParameterResponse][:ScanTypeList][:ScanType]
+				end
+			end
 
       # Receives the current system time on the server side.
       CurrentTime = def_message 49, [:time, :int] # long!
@@ -69,7 +75,7 @@ module IB
 
       # Receive Reuters global fundamental market data. There must be a subscription to
       # Reuters Fundamental set up in Account Management before you can receive this data.
-      FundamentalData = def_message 51, [:request_id, :int], [:xml, :string]
+      FundamentalData = def_message 51, [:request_id, :int], [:xml, :xml]
 
       ContractDataEnd = def_message 52, [:request_id, :int]
 
@@ -80,10 +86,10 @@ module IB
       ExecutionDataEnd = def_message 55, [:request_id, :int]
 
       MarketDataType = def_message 58, [:request_id, :int], [:market_data_type, :int] do
-				#def to_human
 					"<#{self.message_type}:" +
-						" switched to »#{MARKET_DATA_TYPES[market_data_type]}«"
+						" switched to »#{MARKET_DATA_TYPES[market_data_type]}«" # to_human
 				end
+
       CommissionReport =
           def_message 59, [:exec_id, :string],
                       [:commission, :decimal], # Commission amount.
@@ -92,13 +98,14 @@ module IB
                       [:yield, :decimal_max],
                       [:yield_redemption_date, :int] # YYYYMMDD format
 
-				SecurityDefinitionOptionParameter = OptionChainDefinition = def_message [75,0] , 
+			SecurityDefinitionOptionParameter = OptionChainDefinition = def_message [75,0] , 
 																[:request_id, :int],
 																[:exchange, :string],
 																[:con_id, :int],   # underlying_con_id
 																[:trading_class, :string],
 																[:multiplier, :int]
-				class OptionChainDefinition
+
+			class OptionChainDefinition
 					using IBSupport   # defines tws-method for Array  (socket.rb)
 					def load
 						super
@@ -113,9 +120,9 @@ module IB
 					end
 
 					def to_human
-						"OptionChainDefinition #{trading_class}@#{exchange} [#{multiplier}] strikes: #{strikes.first} - #{strikes.last} expirations: #{expirations.first} - #{expirations.last}"
+						"OptionChainDefinition #{trading_class}@#{exchange} [#{multiplier} X ] strikes: #{strikes.first} - #{strikes.last} expirations: #{expirations.first} - #{expirations.last}"
 					end
-				end
+			end
 																
 
 
@@ -125,15 +132,19 @@ module IB
 
       #<- 1-9-789--USD-CASH-----IDEALPRO--CAD------
       #-> ---81-123-5.0E-5--0-
-      TickRequestParameters = def_message 81, [ :ticker_id, :int ],
+
+			MarketDepthExchanges =  def_message [80,0], 
+																[ :request_id, :int ]
+
+      TickRequestParameters = def_message [81, 0], [ :ticker_id, :int ],
 					      [ :min_tick, :decimal],
 					      [ :exchange, :string ],
 					      [ :snapshot_prermissions, :int ]
-      class TickRequestParameters 
-	def load
-	  simple_load
-	end
-      end
+#      class TickRequestParameters 
+#	def load
+#	  simple_load
+#	end
+ #     end
 
       ### Require standalone source files for more complex message classes:
 
@@ -146,6 +157,7 @@ module IB
       require 'ib/messages/incoming/next_valid_id'
       require 'ib/messages/incoming/open_order'
       require 'ib/messages/incoming/order_status'
+      require 'ib/messages/incoming/account_value'
       require 'ib/messages/incoming/portfolio_value'
       require 'ib/messages/incoming/real_time_bar'
       require 'ib/messages/incoming/scanner_data'
@@ -196,7 +208,7 @@ __END__
         TICK_SNAPSHOT_END         = 57
         MARKET_DATA_TYPE          = 58
         COMMISSION_REPORT         = 59   ## 
-	### below is new in api 9.71
+	### const below are new in api 9.71
         POSITION_DATA             = 61
         POSITION_END              = 62
         ACCOUNT_SUMMARY           = 63

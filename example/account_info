@@ -4,8 +4,6 @@
 # messages received from IB (update every 3 minute or so)
 
 require 'bundler/setup'
-require 'logger'
-require 'yaml'
 require 'ib-ruby'
 
 # Only for Advisor accounts: you can provide account_code such as U666777  (otherwise the last account is used)

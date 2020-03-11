@@ -1,78 +1,68 @@
 require 'order_helper'
 require 'combo_helper'
 
-RSpec.describe "Combo Order",  focus: true do
-
-  let(:contract_type) { :butterfly }
-
-  before(:all) { verify_account }
-
-  context 'What-if order' do
-    before(:all) do
-      ib = IB::Connection.new OPTS[:connection].merge(:logger => mock_logger)
-      ib.wait_for :NextValidId
-		end
-    after(:all) { close_connection }
-	let( :the_contract ){  butterfly 'GOOG', '201901', 'CALL', 1130, 1150, 1170 }
-  let( :the_order) do |_|  IB::Limit.order(
-									action: :buy,
-                  order_ref:  'What_if',
-                  limit_price: 0.06,
-                  total_quantity: 10,
-                  what_if: true,
-									account: ACCOUNT)
-	end
-
-		it 'place the order' do
-			place_the_order( contract: the_contract ) do
-				the_order
-			end
-			ib = IB::Connection.current
-    expect( ib.received[:OpenOrder]).to have_at_least(1).open_order_message 
-    expect( ib.received[:OrderStatus]).to have_exactly(0).status_messages 
-    end
+RSpec.describe "What IF  Order"   do
 
 
-#    it 'changes client`s next_local_id' do
-#     @local_id_placed.should == @local_id_before
-#      @ib.next_local_id.should == @local_id_before + 1
-#    end
+  before(:all) { verify_account;  IB::Connection.new OPTS[:connection].merge(:logger => mock_logger)  }
 		
+	after(:all) {  remove_open_orders; close_connection }
 
-    it 'responds with margin info' do
-			ib =  IB::Connection.current
-#
-			#order_should_be /PreSubmitted/
-      order = ib.received[:OpenOrder].first.order
-      expect( order.what_if).to be_truthy
-      expect( order.equity_with_loan).to be_a BigDecimal
-      expect( order.init_margin).to be_a BigDecimal
-      expect( order.maint_margin).to be_a BigDecimal
-      expect( order.equity_with_loan).to be  > 0
-      expect( order.what_if).to  be_truthy
-    end
+	context "Butterfly" do
+    before(:all) do
+      ib = IB::Connection.current
+      ib.wait_for :NextValidId
+			@initial_order_id =  ib.next_local_id
 
-    it 'responds with commission  and margininfo' do
-#       :pending => 'API Bug: No commission in what_if for Combo orders' do
-      o = IB::Connection.current.received[:OpenOrder].first.order
-			#puts o.inspect
-      expect( o.max_commission).to  be_a BigDecimal
-      expect( o.min_commission).to  be_a BigDecimal
-      expect( o.commission).to be_zero
-      expect( o.init_margin).to be > 0
-      expect( o.maint_margin).to be  > 0
+				ib.clear_received   # just in case ...
 
-    end
+				the_contract = butterfly 'GOOG', '202001', 'CALL', 1130, 1150, 1170 
+				@local_id_placed = place_the_order( contract: the_contract ) do | last_price |
+					  IB::Limit.order( action: :buy,
+					                  order_ref:  'What_if',
+										        limit_price: last_price,
+														total_quantity: 10,
+														what_if: true,
+														account: ACCOUNT )
 
-    it 'is not actually being placed though' do
-			ib = IB::Connection.current
-      ib.clear_received
-      ib.send_message :RequestOpenOrders
-      ib.wait_for :OpenOrderEnd
-      expect(  ib.received[:OpenOrder]).to have_exactly(0).order_message
-    end
-  end
+				end
+		end
 
-end # Combo Orders
+		context IB::Connection  do
+			subject{  IB::Connection.current  }
+			its( :next_local_id ){ is_expected.to eq @initial_order_id +1 }
+			it { expect( subject.received[:OpenOrder]).to have_at_least(1).open_order_message }
+			it { expect( subject.received[:OrderStatus]).to have_at_least(0).status_message }
+			it { expect( subject.received[:OrderStatus]).to be_empty }
+			it { expect( subject.received[:ExecutionData]).to be_empty }
+			it { expect( subject.received[:CommissionReport]).to be_empty }
 
+		end
+
+
+		context IB::Messages::Incoming::OpenOrder do
+			subject{ IB::Connection.current.received[:OpenOrder].last }
+			it_behaves_like 'OpenOrder message'
+		end
+
+		context IB::Order do
+			subject{ IB::Connection.current.received[:OpenOrder].last.order }
+			it_behaves_like 'Placed Order' 
+			it_behaves_like 'Presubmitted what-if Order',  IB::Bag.new
+		end
+
+		## separated from  context IB::Order
+		#. ib.clear_received is evaluated before shared_examples are run, thus 
+		#	 makes it impossibe to load the order from the received-hash..
+		context "finalize" do
+			it 'is not actually being placed though' do
+				ib = IB::Connection.current
+				ib.clear_received
+				ib.send_message :RequestOpenOrders
+				ib.wait_for :OpenOrderEnd
+				expect(  ib.received[:OpenOrder]).to have_exactly(0).order_message
+			end
+		end  # context "What if order"
+	end
+end
 __END__

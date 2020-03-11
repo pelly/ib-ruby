@@ -130,7 +130,9 @@ module IB
       85 => :last_reg_time,
       86 => :futures_open_interest,
       87 => :avg_opt_volume,
-      88 => :not_set
+      88 => :not_set,
+			105 => :average_option_volume   #(for Stocks) tickGeneric()
+
 	
       #   Note 1: Tick types BID_OPTION, ASK_OPTION, LAST_OPTION, and MODEL_OPTION return
       #           all Greeks (delta, gamma, vega, theta), the underlying price and the
@@ -332,7 +334,10 @@ module IB
            'm' => :isemm,
            'n' => :farmm,
            'y' => :specialist},
-
+# conditions
+		   :conjunction_connection => { 'o' =>  :or, 'a' => :and },
+			 :operator => { 1 => '>=' , 0 => '<=' }
+ 
   }.freeze
 
   # Obtain property code from given symbolic value:

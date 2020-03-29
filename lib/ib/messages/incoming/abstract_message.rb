@@ -7,8 +7,20 @@ module IB
 			using IBSupport # refine Array-method for decoding of IB-Messages
 
 
+
 			# Container for specific message classes, keyed by their message_ids
 			Classes = {}
+
+			def self.logger
+				@logger ||= Logger.new(STDOUT)
+			end
+
+			def self.construct(msg)
+				msg_id = msg.shift.to_i
+				found_message_class = IB::Messages::Incoming::Classes[msg_id]
+				logger.error { "Got unsupported message #{msg_id}" } unless found_message_class
+				found_message_class.new(msg)
+			end
 
 			class AbstractMessage < IB::Messages::AbstractMessage
 

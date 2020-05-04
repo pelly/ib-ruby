@@ -340,10 +340,9 @@ module IB
     end
 
     ### Sending Outgoing messages to IB
+    #
 
-    # Send an outgoing message.
-    # returns the used request_id if appropiate, otherwise "true"
-    def send_message what, *args
+    def build_message(args, what)
       message =
           case
           when what.is_a?(Messages::Outgoing::AbstractMessage)
@@ -355,12 +354,20 @@ module IB
           else
             error "Only able to send outgoing IB messages", :args
           end
+    end
+
+    # Send an outgoing message.
+    # returns the used request_id if appropiate, otherwise "true"
+    def send_message what, *args
+      message = build_message(args, what)
       error "Not able to send messages, IB not connected!" unless connected?
       begin
         @message_lock.synchronize do
           logger.debug "sending mesasge #{message.inspect}"
-          message.send_to socket
-          #puts "message sent #{message.inspect}"
+          yield(message) if block_given?
+          res = message.send_to socket
+          #logger.debug "message sent #{message.inspect}"
+          res
         end
       rescue Errno::EPIPE
         logger.error { "Broken Pipe, trying to reconnect" }
@@ -400,7 +407,15 @@ module IB
       if connected?
         Thread.abort_on_exception = true
         @reader_running = true
-        @reader_thread = Thread.new { process_messages while @reader_running }
+        @reader_thread = Thread.new {
+          while @reader_running
+            begin
+              process_messages
+            rescue Exception => e
+              logger.info("Reader Thread caught exception: #{e}\n#{e.backtrace.join("\n").indent(4)}")
+            end
+          end
+        }
       else
         logger.fatal { "Could not start reader, not connected!" }
         nil # return_value
@@ -507,5 +522,6 @@ module IB
                       end
           end
     end
-  end # class Connection
+  end
+
 end # module IB

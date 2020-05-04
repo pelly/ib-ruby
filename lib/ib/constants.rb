@@ -160,6 +160,8 @@ module IB
 			3 => :delayed,
 			4 => :frozen_delayed }.freeze
 
+  MARKET_DATA_SYM_TYPES = MARKET_DATA_TYPES.invert.freeze
+
   # Market depth messages contain these "operation" codes to tell you what to do with the data.
   # See also http://www.interactivebrokers.com/php/apiUsersGuide/apiguide/java/updatemktdepth.htm
   MARKET_DEPTH_OPERATIONS = {

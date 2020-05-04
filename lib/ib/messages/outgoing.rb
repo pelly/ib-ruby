@@ -194,7 +194,7 @@ module IB
 			#										= 3 (:delayed) for delayed streaming , 4 (:frozen_delayed)  for frozen delayed
       RequestMarketDataType =
           def_message 59, [:market_data_type,
-                           lambda { |type| MARKET_DATA_TYPES.invert[type] || type }, []]
+                           lambda { |type| MARKET_DATA_SYM_TYPES[type] || type }, []]
 
       # Send this message to receive Reuters global fundamental data. There must be
       # a subscription to Reuters Fundamental set up in Account Management before

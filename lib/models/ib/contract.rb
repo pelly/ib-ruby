@@ -7,144 +7,172 @@ module IB
 
     # Fields are Strings unless noted otherwise
     prop :con_id, # int: The unique contract identifier.
-      :currency, # Only needed if there is an ambiguity, e.g. when SMART exchange
-      #            and IBM is being requested (IBM can trade in GBP or USD).
+         :currency, # Only needed if there is an ambiguity, e.g. when SMART exchange
+         #            and IBM is being requested (IBM can trade in GBP or USD).
 
-      :legs_description, # received in OpenOrder for all combos
+         :legs_description, # received in OpenOrder for all combos
 
-      :sec_type, # Security type. Valid values are: SECURITY_TYPES
+         :sec_type, # Security type. Valid values are: SECURITY_TYPES
 
-      :sec_id => :sup, # Unique identifier of the given secIdType.
+         :sec_id => :sup, # Unique identifier of the given secIdType.
 
-      :sec_id_type => :sup, # Security identifier, when querying contract details or
-      #               when placing orders. Supported identifiers are:
-      #               -  ISIN (Example: Apple: US0378331005)
-      #               -  CUSIP (Example: Apple: 037833100)
-      #               -  SEDOL (6-AN + check digit. Example: BAE: 0263494)
-      #               -  RIC (exchange-independent RIC Root and exchange-
-      #                  identifying suffix. Ex: AAPL.O for Apple on NASDAQ.)
+         :sec_id_type => :sup, # Security identifier, when querying contract details or
+         #               when placing orders. Supported identifiers are:
+         #               -  ISIN (Example: Apple: US0378331005)
+         #               -  CUSIP (Example: Apple: 037833100)
+         #               -  SEDOL (6-AN + check digit. Example: BAE: 0263494)
+         #               -  RIC (exchange-independent RIC Root and exchange-
+         #                  identifying suffix. Ex: AAPL.O for Apple on NASDAQ.)
 
-      :symbol => :s, # This is the symbol of the underlying asset.
+         :symbol => :s, # This is the symbol of the underlying asset.
 
-      :local_symbol => :s, # Local exchange symbol of the underlying asset
-      :trading_class => :s,
-      # Future/option contract multiplier (only needed when multiple possibilities exist)
-      :multiplier => {:set => :i},
+         :local_symbol => :s, # Local exchange symbol of the underlying asset
+         :trading_class => :s,
+         # Future/option contract multiplier (only needed when multiple possibilities exist)
+         :multiplier => {:set => :i},
 
-      :strike => :f, # double: The strike price.
-      :expiry => :s, # The expiration date. Use the format YYYYMM or YYYYMMDD
-      :last_trading_day =>  :s, # the tws returns the last trading day in Format YYYYMMMDD hh:mm
-				# which may differ from the expiry 
-      :exchange => :sup, # The order destination, such as Smart.
-      :primary_exchange => :sup, # Non-SMART exchange where the contract trades.
-      :include_expired => :bool, # When true, contract details requests and historical
-      #         data queries can be performed pertaining to expired contracts.
-      #         Note: Historical data queries on expired contracts are
-      #         limited to the last year of the contracts life, and are
-      #         only supported for expired futures contracts.
-      #         This field can NOT be set to true for orders.
+         :strike => :f, # double: The strike price.
+         :expiry => :s, # The expiration date. Use the format YYYYMM or YYYYMMDD
+         :last_trading_day => :s, # the tws returns the last trading day in Format YYYYMMMDD hh:mm
+         # which may differ from the expiry
+         :exchange => :sup, # The order destination, such as Smart.
+         :primary_exchange => :sup, # Non-SMART exchange where the contract trades.
+         :include_expired => :bool, # When true, contract details requests and historical
+         #         data queries can be performed pertaining to expired contracts.
+         #         Note: Historical data queries on expired contracts are
+         #         limited to the last year of the contracts life, and are
+         #         only supported for expired futures contracts.
+         #         This field can NOT be set to true for orders.
 
 
-      # Specifies a Put or Call. Valid input values are: P, PUT, C, CALL
-    :right => {
-      :set => proc { |val|
-        self[:right] =
-        case val.to_s.upcase
-        when 'NONE', '', '0', '?'
-          ''
-        when 'PUT', 'P'
-          'P'
-        when 'CALL', 'C'
-          'C'
-        else
-          val
-        end
-      },
-      :validate => {:format => {:with => /\Aput$|^call$|^none\z/,
-                                :message => "should be put, call or none"}}
-    }
+         # Specifies a Put or Call. Valid input values are: P, PUT, C, CALL
+         :right => {
+             :set => proc { |val|
+               self[:right] =
+                   case val.to_s.upcase
+                   when 'NONE', '', '0', '?'
+                     ''
+                   when 'PUT', 'P'
+                     'P'
+                   when 'CALL', 'C'
+                     'C'
+                   else
+                     val
+                   end
+             },
+             :validate => {:format => {:with => /\Aput$|^call$|^none\z/,
+                                       :message => "should be put, call or none"}}
+         }
 
     attr_accessor :description # NB: local to ib, not part of TWS.
 
     ### Associations
-		has_many :misc   # multi purpose association
+    has_many :misc # multi purpose association
     has_many :orders # Placed for this Contract
-		has_many :portfolio_values
+    has_many :portfolio_values
 
     has_many :bars # Possibly representing trading history for this Contract
 
     has_one :contract_detail # Volatile info about this Contract
 
     # For Contracts that are part of BAa ## leg is now a method of contract
-#   has_one :leg #, :class_name => 'ComboLeg', :foreign_key => :leg_contract_id
-   # has_one :combo, :class_name => 'Contract', :through => :leg
+    #   has_one :leg #, :class_name => 'ComboLeg', :foreign_key => :leg_contract_id
+    # has_one :combo, :class_name => 'Contract', :through => :leg
 
     # for Combo/BAG Contracts that contain ComboLegs
-    has_many :combo_legs#, :foreign_key => :combo_id
- #   has_many :leg_contracts, :class_name => 'Contract', :through => :combo_legs
-#    alias legs combo_legs
- #   alias legs= combo_legs=
+    has_many :combo_legs #, :foreign_key => :combo_id
+    #   has_many :leg_contracts, :class_name => 'Contract', :through => :combo_legs
+    #    alias legs combo_legs
+    #   alias legs= combo_legs=
 
-  #    alias combo_legs_description legs_description
-  #  alias combo_legs_description= legs_description=
+    #    alias combo_legs_description legs_description
+    #  alias combo_legs_description= legs_description=
 
-      # for Delta-Neutral Combo Contracts
-      has_one :underlying
+    # for Delta-Neutral Combo Contracts
+    has_one :underlying
     alias under_comp underlying
     alias under_comp= underlying=
 
 
-      ### Extra validations
-      validates_inclusion_of :sec_type, :in => CODES[:sec_type].keys,
-      :message => "should be valid security type"
+    ### Extra validations
+    validates_inclusion_of :sec_type, :in => CODES[:sec_type].keys,
+                           :message => "should be valid security type"
 
     validates_format_of :expiry, :with => /\A\d{6}$|^\d{8}$|\A\z/,
-      :message => "should be YYYYMM or YYYYMMDD"
+                        :message => "should be YYYYMM or YYYYMMDD"
 
     validates_format_of :primary_exchange, :without => /SMART/,
-      :message => "should not be SMART"
+                        :message => "should not be SMART"
 
     validates_format_of :sec_id_type, :with => /ISIN|SEDOL|CUSIP|RIC|\A\z/,
-      :message => "should be valid security identifier"
+                        :message => "should be valid security identifier"
 
     validates_numericality_of :multiplier, :strike, :allow_nil => true
 
-    def default_attributes  # :nodoc:
+    def default_attributes # :nodoc:
       super.merge :con_id => 0,
-        :strike => 0.0,
-        :right => :none, # Not an option
-       # :exchange => 'SMART',
-        :include_expired => false
+                  :strike => 0.0,
+                  :right => :none, # Not an option
+                  # :exchange => 'SMART',
+                  :include_expired => false
     end
-#    This returns an Array of data from the given contract and is used to represent
-#    contracts in outgoing messages.
-#    
-#    Different messages serialize contracts differently. Go figure.
-#    
-#    Note that it does NOT include the combo legs.
-#    serialize :option, :con_id, :include_expired, :sec_id
-#    
-#    18/1/18: serialise always includes conid
 
-    def serialize *fields  # :nodoc:
-      print_default = ->(field, default="") { field.blank? ? default : field }
-      print_not_zero = ->(field, default="") { field.to_i.zero? ? default : field }
-      [(con_id.present? && !con_id.is_a?(Symbol) && con_id.to_i > 0 ? con_id : ""),
+    #    This returns an Array of data from the given contract and is used to represent
+    #    contracts in outgoing messages.
+    #
+    #    Different messages serialize contracts differently. Go figure.
+    #
+    #    Note that it does NOT include the combo legs.
+    #    serialize :option, :con_id, :include_expired, :sec_id
+    #
+    #    18/1/18: serialise always includes conid
+
+    def serialize *fields # :nodoc:
+      print_default = ->(field, default = "") { field.blank? ? default : field }
+      print_not_zero = ->(field, default = "") { field.to_i.zero? ? default : field }
+
+      arry = [(con_id.present? && !con_id.is_a?(Symbol) && con_id.to_i > 0 ? con_id : ""),
        print_default[symbol],
        print_default[self[:sec_type]],
-       ( fields.include?(:option) ?
-       [ print_default[expiry], 
-				 print_not_zero[strike], 
-				 print_default[self[:right]], 
-				 print_default[multiplier]] : nil ),
+       (fields.include?(:option) ?
+            [print_default[expiry],
+             print_not_zero[strike],
+             print_default[self[:right]],
+             print_default[multiplier]] : nil),
        print_default[exchange],
-       ( fields.include?(:primary_exchange) ? print_default[primary_exchange]   : nil ) ,
+       (fields.include?(:primary_exchange) ? print_default[primary_exchange] : nil),
        print_default[currency],
        print_default[local_symbol],
-       ( fields.include?(:trading_class) ? print_default[trading_class] : nil ),
-       ( fields.include?(:include_expired) ? print_default[include_expired,0] : nil ),
-       ( fields.include?(:sec_id_type) ? [print_default[sec_id_type], print_default[sec_id]] : nil )
-       ].flatten.compact
+       (fields.include?(:trading_class) ? print_default[trading_class] : nil),
+       (fields.include?(:include_expired) ? print_default[include_expired, 0] : nil),
+       (fields.include?(:sec_id_type) ? [print_default[sec_id_type], print_default[sec_id]] : nil)
+      ]
+      arry.flatten.compact
+    end
+
+    def self.deserialize(*fields)
+      fields = [fields].flatten
+      hash = {}
+      hash = {
+          con_id: fields[0].empty? ? nil : fields[0].to_i,
+          symbol: fields[1],
+          sec_type: fields[2],
+      }
+      if hash[:sec_type] == "OPT"
+        hash[:expiry] = fields[3]
+        hash[:strike] = fields[4].empty? ? nil : fields[4]
+        hash[:right] = fields[5]
+        hash[:multiplier] = fields[6] unless  fields[6].empty?
+      end
+      hash[:exchange] = fields[7]
+      hash[:primary_exchange] = fields[8]
+      hash[:currency] = fields[9]
+      hash[:local_symbol] = fields[10]
+      hash[:trading_class] = fields[11]
+      hash[:include_expired] = fields[12]
+      hash[:sec_id_type] = fields[13]
+      hash[:sec_id] = fields[14]
+      self.new(**hash)
     end
 
     # serialize contract 
@@ -158,27 +186,26 @@ module IB
     # con_id. sec_type, expiry, strike, right, multiplier, exchange, primary_exchange, currency, local_symbol
     # other fields on demand
     # acutal used by place_order, request_marketdata, request_market_depth, exercise_options
-    def serialize_short *fields  # :nodoc:
+    def serialize_short *fields # :nodoc:
       serialize :option, :trading_class, :primary_exchange, *fields
     end
 
     # Serialize under_comp parameters: EClientSocket.java, line 471
-    def serialize_under_comp *args   # :nodoc: 
+    def serialize_under_comp *args # :nodoc:
       under_comp ? under_comp.serialize : [false]
     end
 
     # Defined in Contract, not BAG subclass to keep code DRY
-    def serialize_legs *fields     # :nodoc:
+    def serialize_legs *fields # :nodoc:
       case
       when !bag?
-       [] 
+        []
       when combo_legs.empty?
         [0]
       else
         [combo_legs.size, combo_legs.map { |the_leg| the_leg.serialize *fields }].flatten
       end
     end
-
 
 
     # This produces a string uniquely identifying this contract, in the format used
@@ -197,24 +224,24 @@ module IB
       serialize_long.join(":")
     end
 
-		def  essential
+    def essential
 
-			self_attributes = [ :right, :sec_type]
-			the_attributes = [ :symbol , :con_id,   :exchange, 
-									  :currency, :expiry,  :strike,   :local_symbol, :last_trading_day,
-								:multiplier,  :primary_exchange, :trading_class ]
-			the_hash= the_attributes.map{|x| y= attributes[x];  [x,y] if y.present?  }.compact.to_h
-			the_hash[:description] = @description if @description.present?
-			self.class.new   the_hash.merge( self_attributes.map{|x| y = self.send(x);  [x,y] unless y == :none}.compact.to_h )
-		end
+      self_attributes = [:right, :sec_type]
+      the_attributes = [:symbol, :con_id, :exchange,
+                        :currency, :expiry, :strike, :local_symbol, :last_trading_day,
+                        :multiplier, :primary_exchange, :trading_class]
+      the_hash = the_attributes.map { |x| y = attributes[x]; [x, y] if y.present? }.compact.to_h
+      the_hash[:description] = @description if @description.present?
+      self.class.new the_hash.merge(self_attributes.map { |x| y = self.send(x); [x, y] unless y == :none }.compact.to_h)
+    end
 
 
     # Contract comparison
 
-    def == other  # :nodoc: 
-			return false if !other.is_a?(Contract)
+    def == other # :nodoc:
+      return false if !other.is_a?(Contract)
       return true if super(other)
-			return true if !con_id.to_i.zero?  && con_id == other.con_id
+      return true if !con_id.to_i.zero? && con_id == other.con_id
 
       return false unless other.is_a?(self.class)
 
@@ -233,20 +260,20 @@ module IB
       # Same con_id for all Bags, but unknown for new Contracts...
       # 0 or nil con_id  matches any
       return false if con_id != 0 && other.con_id != 0 &&
-        con_id && other.con_id && con_id != other.con_id
+          con_id && other.con_id && con_id != other.con_id
 
       # SMART or nil exchange matches any
       return false if exchange != 'SMART' && other.exchange != 'SMART' &&
-        exchange && other.exchange && exchange != other.exchange
+          exchange && other.exchange && exchange != other.exchange
 
       # Comparison for Bonds and Options
       if bond? || option?
         return false if right != other.right || strike != other.strike
         return false if multiplier && other.multiplier &&
-          multiplier != other.multiplier
+            multiplier != other.multiplier
         return false if expiry && expiry[0..5] != other.expiry[0..5]
         return false unless expiry && (expiry[6..7] == other.expiry[6..7] ||
-                                       expiry[6..7].empty? || other.expiry[6..7].empty?)
+            expiry[6..7].empty? || other.expiry[6..7].empty?)
       end
 
       # All else being equal...
@@ -256,38 +283,39 @@ module IB
     def to_s
       "<Contract: " + instance_variables.map do |key|
         value = send(key[1..-1])
-        " #{key}=#{value} (#{value.class}) " unless value.blank? 
+        " #{key}=#{value} (#{value.class}) " unless value.blank?
       end.compact.join(',') + " >"
     end
 
     def to_human
       "<Contract: " +
-        [symbol,
-         sec_type,
-         (expiry == '' ? nil : expiry),
-         (right == :none ? nil : right),
-         (strike == 0 ? nil : strike),
-         exchange,
-         currency
-         ].compact.join(" ") + ">"
+          [symbol,
+           sec_type,
+           (expiry == '' ? nil : expiry),
+           (right == :none ? nil : right),
+           (strike == 0 ? nil : strike),
+           exchange,
+           currency
+          ].compact.join(" ") + ">"
     end
 
     def to_short
-      if expiry.blank? && last_trading_day.blank? 
-      "#{symbol}# {exchange}# {currency}"
+      if expiry.blank? && last_trading_day.blank?
+        "#{symbol}# {exchange}# {currency}"
       elsif expiry.present?
-      "#{symbol}(#{strike}) #{right} #{expiry} /#{exchange}/#{currency}"
-			else
-      "#{symbol}(#{strike}) #{right} #{last_trading_day} /#{exchange}/#{currency}"
+        "#{symbol}(#{strike}) #{right} #{expiry} /#{exchange}/#{currency}"
+      else
+        "#{symbol}(#{strike}) #{right} #{last_trading_day} /#{exchange}/#{currency}"
       end
     end
+
     # Testing for type of contract:
-		# depreciated :  use is_a?(IB::Stock, IB::Bond, IB::Bag etc) instead
-		def bag?  #  :nodoc:
+    # depreciated :  use is_a?(IB::Stock, IB::Bond, IB::Bag etc) instead
+    def bag? #  :nodoc:
       self[:sec_type] == 'BAG'
     end
 
-    def bond?  #  :nodoc:
+    def bond? #  :nodoc:
 
       self[:sec_type] == 'BOND'
     end
@@ -297,12 +325,12 @@ module IB
       self[:sec_type] == 'STK'
     end
 
-    def option?  #  :nodoc:
+    def option? #  :nodoc:
 
       self[:sec_type] == 'OPT'
     end
 
-    def index?  #  :nodoc:
+    def index? #  :nodoc:
 
       self[:sec_type] == 'IND'
     end
@@ -319,26 +347,26 @@ In places where these terms are used to indicate a concept, we have left them as
 =end
 
 
-# IB-ruby uses expiry to query Contracts.
-# 
-# The response from the TWS is stored in 'last_trading_day' (Contract) and 'real_expiration_data' (ContractDetails)
-# 
-# However, after querying a contract, 'expiry' ist overwritten by 'last_trading_day'. The original 'expiry'
-# is still available through 'attributes[:expiry]'
+    # IB-ruby uses expiry to query Contracts.
+    #
+    # The response from the TWS is stored in 'last_trading_day' (Contract) and 'real_expiration_data' (ContractDetails)
+    #
+    # However, after querying a contract, 'expiry' ist overwritten by 'last_trading_day'. The original 'expiry'
+    # is still available through 'attributes[:expiry]'
 
-		def expiry
-			if self.last_trading_day.present?
-				last_trading_day.gsub(/-/,'')
-			else
-				@attributes[:expiry]
-			end
-		end
+    def expiry
+      if self.last_trading_day.present?
+        last_trading_day.gsub(/-/, '')
+      else
+        @attributes[:expiry]
+      end
+    end
 
-		
-# is read by Account#PlaceOrder to set requirements for contract-types, as NonGuaranteed for stock-spreads
-		def order_requirements
-			Hash.new
-		end
+
+    # is read by Account#PlaceOrder to set requirements for contract-types, as NonGuaranteed for stock-spreads
+    def order_requirements
+      Hash.new
+    end
 
   end # class Contract
 
@@ -351,13 +379,13 @@ In places where these terms are used to indicate a concept, we have left them as
   require 'models/ib/future'
   require 'models/ib/stock'
   require 'models/ib/index'
-	require 'models/ib/spread'
-#	require 'models/ib/straddle'
-#  require 'models/ib/strangle'
-#  require 'models/ib/calendar'
-#  require 'models/ib/vertical'
-#  require 'models/ib/butterfly'
-#  require 'models/ib/stock_spread'
+  require 'models/ib/spread'
+  #	require 'models/ib/straddle'
+  #  require 'models/ib/strangle'
+  #  require 'models/ib/calendar'
+  #  require 'models/ib/vertical'
+  #  require 'models/ib/butterfly'
+  #  require 'models/ib/stock_spread'
 
   class Contract
     # Contract subclasses representing specialized security types.
@@ -367,7 +395,7 @@ In places where these terms are used to indicate a concept, we have left them as
     Subclasses[:option] = IB::Option
     Subclasses[:future] = IB::Future
     Subclasses[:stock] = IB::Stock
-    Subclasses[:forex] =  IB::Forex
+    Subclasses[:forex] = IB::Forex
     Subclasses[:index] = IB::Index
     Subclasses[:Spread] = IB::Spread
 #    Subclasses[:strangle] = IB::Strangle
@@ -375,18 +403,18 @@ In places where these terms are used to indicate a concept, we have left them as
 #    Subclasses[:vertical] = IB::Vertical
 
 
-    # This builds an appropriate Contract subclass based on its type
-		#
-		# does NOT work with Straddle,Strangle,Calendar,Vertical and other spread-types
-		# 
-		# is used to copy Contracts by value
+# This builds an appropriate Contract subclass based on its type
+#
+# does NOT work with Straddle,Strangle,Calendar,Vertical and other spread-types
+#
+# is used to copy Contracts by value
     def self.build opts = {}
-      subclass =( VALUES[:sec_type][opts[:sec_type]] || opts['sec_type'] || opts[:sec_type]).to_sym
+      subclass = (VALUES[:sec_type][opts[:sec_type]] || opts['sec_type'] || opts[:sec_type]).to_sym
       Contract::Subclasses[subclass].new opts
     end
 
-    # This returns a Contract initialized from the serialize_ib_ruby format string.
-    def self.from_ib_ruby 
+# This returns a Contract initialized from the serialize_ib_ruby format string.
+    def self.from_ib_ruby
       keys = [:con_id, :symbol, :sec_type, :expiry, :strike, :right, :multiplier,
               :exchange, :primary_exchange, :currency, :local_symbol]
       props = Hash[keys.zip(string.split(":"))]
@@ -397,12 +425,12 @@ In places where these terms are used to indicate a concept, we have left them as
 end # module IB
 
 class String
-	def to_contract
-      keys = [:con_id, :symbol, :sec_type, :expiry, :strike, :right, :multiplier,
-              :exchange, :primary_exchange, :currency, :local_symbol]
-      props = Hash[keys.zip(split(":"))]
-      props.delete_if { |k, v| v.nil? || v.empty? }
-      IB::Contract.build props
+  def to_contract
+    keys = [:con_id, :symbol, :sec_type, :expiry, :strike, :right, :multiplier,
+            :exchange, :primary_exchange, :currency, :local_symbol]
+    props = Hash[keys.zip(split(":"))]
+    props.delete_if { |k, v| v.nil? || v.empty? }
+    IB::Contract.build props
 
-	end
+  end
 end

@@ -21,7 +21,7 @@ Gem::Specification.new do |gem|
   # Dependencies
 	gem.add_dependency 'activesupport', '>= 5.2'
 	gem.add_dependency 'activemodel'
-  gem.add_dependency 'ox'
+  gem.add_dependency 'ox', "~> 2.13"
   gem.add_dependency 'bundler', '>= 1.1.16'
   gem.add_development_dependency 'rspec','>=3.6'
 end

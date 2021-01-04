@@ -1,5 +1,5 @@
 require 'thread'
-require 'active_support'
+require 'active_support/all'
 require 'ib/socket'
 require 'ib/logger'
 require 'ib/messages'
@@ -34,6 +34,7 @@ module IB
     attr_accessor :server_version
     attr_accessor :client_version
     attr_accessor :socket_factory
+
     alias next_order_id next_local_id
     alias next_order_id= next_local_id=
 
@@ -45,15 +46,13 @@ module IB
                    socket_factory: IBSocket,
                    #									 redis: false,    # future plans
                    logger: default_logger,
-                   client_id: random_id,
+                   client_id: duration_based_rand(1.month),
                    client_version: IB::Messages::CLIENT_VERSION, # lib/ib/server_versions.rb
                    optional_capacities: "", # TWS-Version 974: "+PACEAPI"
                    #server_version: IB::Messages::SERVER_VERSION, # lib/messages.rb
                    **any_other_parameters_which_are_ignored
       # V 974 release motes
       # API messages sent at a higher rate than 50/second can now be paced by TWS at the 50/second rate instead of potentially causing a disconnection. This is now done automatically by the RTD Server API and can be done with other API technologies by invoking SetConnectOptions("+PACEAPI") prior to eConnect.
-
-      @socket_factory = socket_factory || IBSocket
 
       # convert parameters into instance-variables and assign them
       method(__method__).parameters.each do |type, k|
@@ -93,9 +92,11 @@ module IB
     # Ensure the transmission of NextValidId.
     # works even if no reader_thread is established
     def ensure_trasmission_of_next_valid_id
-      disconnect if connected?
-      update_next_order_id
-      raise CantGetNextValidId.new if self.next_local_id.nil?
+      if connect
+        disconnect if connected?
+        update_next_order_id
+        raise CantGetNextValidId.new if self.next_local_id.nil?
+      end
     end
 
     def ensure_next_valid_id_subscription
@@ -152,8 +153,8 @@ module IB
       socket.send_messages start_api, version, @client_id, @optional_capacities
       @connected = true
       logger.info { "Connected to server, version: #{@server_version},\n connection time: " +
-          "#{@local_connect_time} local, " +
-          "#{@remote_connect_time} remote." }
+        "#{@local_connect_time} local, " +
+        "#{@remote_connect_time} remote." }
 
       # if the client_id is wrong or the port is not accessible the first read attempt fails
       # get the first message and proceed if something reasonable is recieved
@@ -201,7 +202,7 @@ module IB
     def subscribe *args, &block
       @subscribe_lock.synchronize do
         subscriber = args.last.respond_to?(:call) ? args.pop : block
-        id = random_id
+        id = duration_based_rand(1.month)
 
         error "Need subscriber proc or block ", :args unless subscriber.is_a? Proc
 
@@ -285,7 +286,6 @@ module IB
       end
     end
 
-
     # Wait for specific condition(s) - given as callable/block, or
     # message type(s) - given as Symbol or [Symbol, times] pair.
     # Timeout after given time or 1 second.
@@ -308,7 +308,6 @@ module IB
 
     ### Working with Incoming messages from IB
 
-
     def reader_running?
       @reader_running && @reader_thread && @reader_thread.alive?
     end
@@ -329,6 +328,7 @@ module IB
           #
           #  # We go ahead process messages regardless (a no-op if socket_likely_shutdown).
           process_message
+
           #
           #  # After processing, if socket has shut down we sleep for 100ms
           #  # to avoid spinning in a tight loop. If the server side somehow
@@ -344,16 +344,16 @@ module IB
 
     def build_message(args, what)
       message =
-          case
-          when what.is_a?(Messages::Outgoing::AbstractMessage)
-            what
-          when what.is_a?(Class) && what < Messages::Outgoing::AbstractMessage
-            what.new *args
-          when what.is_a?(Symbol)
-            Messages::Outgoing.const_get(what).new *args
-          else
-            error "Only able to send outgoing IB messages", :args
-          end
+        case
+        when what.is_a?(Messages::Outgoing::AbstractMessage)
+          what
+        when what.is_a?(Class) && what < Messages::Outgoing::AbstractMessage
+          what.new *args
+        when what.is_a?(Symbol)
+          Messages::Outgoing.const_get(what).new *args
+        else
+          error "Only able to send outgoing IB messages", :args
+        end
     end
 
     # Send an outgoing message.
@@ -375,6 +375,7 @@ module IB
         connect
         retry
       end
+
       ## return the transmitted message
       message.data[:request_id].presence || true
     end
@@ -412,7 +413,8 @@ module IB
             begin
               process_messages
             rescue Exception => e
-              logger.info("Reader Thread caught exception: #{e}\n#{e.backtrace.join("\n").indent(4)}")
+              logger.error("Reader Thread caught exception: #{e}\n#{e.backtrace.join("\n").indent(4)}")
+              raise e
             end
           end
         }
@@ -510,18 +512,18 @@ module IB
     # Check if all given conditions are satisfied
     def satisfied? *conditions
       !conditions.empty? &&
-          conditions.inject(true) do |result, condition|
-            result && if condition.is_a?(Symbol)
-                        received?(condition)
-                      elsif condition.is_a?(Array)
-                        received?(*condition)
-                      elsif condition.respond_to?(:call)
-                        condition.call
-                      else
-                        logger.error { "Unknown wait condition #{condition}" }
-                      end
-          end
+        conditions.inject(true) do |result, condition|
+          result && if condition.is_a?(Symbol)
+                      received?(condition)
+                    elsif condition.is_a?(Array)
+                      received?(*condition)
+                    elsif condition.respond_to?(:call)
+                      condition.call
+                    else
+                      logger.error { "Unknown wait condition #{condition}" }
+                    end
+        end
     end
   end
-
+  # class Connection
 end # module IB

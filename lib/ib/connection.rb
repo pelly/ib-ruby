@@ -43,7 +43,7 @@ module IB
                    #:port => '7497', # TWS connection  --> demo				  7496:  production
                    connect: true, # Connect at initialization
                    received: true, # Keep all received messages in a @received Hash
-                   socket_factory: IBSocket,
+                   socket_factory: nil,
                    #									 redis: false,    # future plans
                    logger: default_logger,
                    client_id: duration_based_rand(1.month),
@@ -54,6 +54,7 @@ module IB
       # V 974 release motes
       # API messages sent at a higher rate than 50/second can now be paced by TWS at the 50/second rate instead of potentially causing a disconnection. This is now done automatically by the RTD Server API and can be done with other API technologies by invoking SetConnectOptions("+PACEAPI") prior to eConnect.
 
+      socket_factory ||= IBSocket
       # convert parameters into instance-variables and assign them
       method(__method__).parameters.each do |type, k|
         next unless type == :key
@@ -449,6 +450,12 @@ module IB
       @msg_intercept = nil
     end
 
+    def add_message_processor(name: :general, overwrite: false, &processor)
+      if !message_processors.has_key?(name) || overwrite
+        message_processors[name] = processor
+      end
+    end
+
     protected
 
     # Message subscribers. Key is the message class to listen for.
@@ -466,6 +473,10 @@ module IB
       rescue Exception => e
         logger.info("Error intercepting message: #{e.to_s}")
       end
+    end
+
+    def message_processors
+      @message_processors ||= {}
     end
 
     # Process single incoming message (blocking!)
@@ -487,6 +498,8 @@ module IB
         error "Something strange happened - Reader has to be restarted", :reader if msg_id.to_i.zero?
         msg = Messages::Incoming::Classes[msg_id].new(the_decoded_message)
         #puts "got message: #{msg.inspect}"
+        #
+        message_processors.each { |name, mp| mp.call(msg) }
 
         # Deliver message to all registered subscribers, alert if no subscribers
         # Ruby 2.0 and above: Hashes are ordered.
@@ -525,5 +538,6 @@ module IB
         end
     end
   end
+
   # class Connection
 end # module IB

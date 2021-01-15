@@ -3,7 +3,7 @@ require 'active_support/all'
 require 'ib/socket'
 require 'ib/logger'
 require 'ib/messages'
-
+require "ib/incremental_id_generator"
 module IB
   # Encapsulates API connection to TWS or Gateway
   class Connection
@@ -35,6 +35,15 @@ module IB
     attr_accessor :client_version
     attr_accessor :socket_factory
 
+    @id_generator = IncrementalIdGenerator.new
+
+    class << self
+      attr_reader :id_generator
+    end
+    def id_generator
+      self.class.id_generator
+    end
+
     alias next_order_id next_local_id
     alias next_order_id= next_local_id=
 
@@ -46,14 +55,13 @@ module IB
                    socket_factory: nil,
                    #									 redis: false,    # future plans
                    logger: default_logger,
-                   client_id: duration_based_rand(1.month),
+                   client_id: id_generator.next,
                    client_version: IB::Messages::CLIENT_VERSION, # lib/ib/server_versions.rb
                    optional_capacities: "", # TWS-Version 974: "+PACEAPI"
                    #server_version: IB::Messages::SERVER_VERSION, # lib/messages.rb
                    **any_other_parameters_which_are_ignored
       # V 974 release motes
       # API messages sent at a higher rate than 50/second can now be paced by TWS at the 50/second rate instead of potentially causing a disconnection. This is now done automatically by the RTD Server API and can be done with other API technologies by invoking SetConnectOptions("+PACEAPI") prior to eConnect.
-
       socket_factory ||= IBSocket
       # convert parameters into instance-variables and assign them
       method(__method__).parameters.each do |type, k|
@@ -93,11 +101,9 @@ module IB
     # Ensure the transmission of NextValidId.
     # works even if no reader_thread is established
     def ensure_trasmission_of_next_valid_id
-      if connect
         disconnect if connected?
         update_next_order_id
         raise CantGetNextValidId.new if self.next_local_id.nil?
-      end
     end
 
     def ensure_next_valid_id_subscription
@@ -203,7 +209,7 @@ module IB
     def subscribe *args, &block
       @subscribe_lock.synchronize do
         subscriber = args.last.respond_to?(:call) ? args.pop : block
-        id = duration_based_rand(1.month)
+        id = id_generator.next
 
         error "Need subscriber proc or block ", :args unless subscriber.is_a? Proc
 
@@ -226,6 +232,7 @@ module IB
     # Note this does not unsubscribe the special :NextId subscription constructed a initialization used for
     # acquiring the next order request id.
     def unsubscribe_all
+      logger.info("Connection#unsubscribe_all")
       @subscribe_lock.synchronize do
         subscribers.each { |_, subs| do_unsubscribe(*(subs.keys - [@next_valid_id_sub_id])) }
       end
@@ -233,6 +240,7 @@ module IB
 
     # Remove all subscribers with specific subscriber id
     def unsubscribe(*ids)
+      logger.info("Connection#unsubscribe ids: #{ids.inspect}")
       @subscribe_lock.synchronize do
         do_unsubscribe(*ids)
       end
@@ -415,7 +423,7 @@ module IB
               process_messages
             rescue Exception => e
               logger.error("Reader Thread caught exception: #{e}\n#{e.backtrace.join("\n").indent(4)}")
-              raise e
+              # raise e
             end
           end
         }
@@ -479,6 +487,28 @@ module IB
       @message_processors ||= {}
     end
 
+    class ErrorDecodingMessages
+      def initialize(the_decoded_message)
+        @the_decoded_message = the_decoded_message
+      end
+
+      def inspect
+        "ERROR decoding message: #{@the_decoded_message.inspect[0...500]}"
+      end
+
+      def to_s
+        inspect
+      end
+
+      def data
+        {}
+      end
+
+      def message_type
+        self.class.name.to_sym
+      end
+    end
+
     # Process single incoming message (blocking!)
     def process_message
       logger.progname = 'IB::Connection#process_message' if logger.is_a?(Logger)
@@ -496,7 +526,13 @@ module IB
         # NB: Failure here usually means unsupported message type received
         logger.error { "Got unsupported message #{msg_id}" } unless Messages::Incoming::Classes[msg_id]
         error "Something strange happened - Reader has to be restarted", :reader if msg_id.to_i.zero?
-        msg = Messages::Incoming::Classes[msg_id].new(the_decoded_message)
+
+        msg = begin
+                  Messages::Incoming::Classes[msg_id].new(the_decoded_message)
+              rescue Exception => e
+                ErrorDecodingMessages.new(the_decoded_message)
+              end
+
         #puts "got message: #{msg.inspect}"
         #
         message_processors.each { |name, mp| mp.call(msg) }
